@@ -1,0 +1,80 @@
+import tensorflow as tf
+from tensorflow.keras import layers, Model, Input
+from sklearn.datasets import fetch_lfw_people
+from sklearn.model_selection import train_test_split
+import tensorflow.keras.backend as K
+
+from Generators import *
+from PlotMetrics import *
+from DataPipeline import get_data
+
+
+
+def contrastive_loss(y_true, y_pred):
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) + (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+def euclidean_distance(vectors):
+    x, y = vectors
+    return K.sqrt(K.sum(K.square(x - y), axis=1, keepdims=True))
+
+def main():
+    # Load LFW dataset
+    X,y , target_names = get_data(min_pics=2)
+
+    # Create triplets (anchor, positive, negative)
+    print("Generating triplets")
+    triplets = create_triplets(y, num_triplets=15000)
+    print(f"Generated {len(triplets)} triplets")
+
+    # Create embedding model
+    embedding_model = tf.keras.Sequential([
+        layers.Input(shape=X.shape[1:]),
+        layers.Conv2D(32, 3, activation='relu', padding='same'),
+        layers.MaxPooling2D(),
+        layers.Conv2D(64, 3, activation='relu', padding='same'),
+        layers.MaxPooling2D(),
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.Dense(64),
+        layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=1)),
+    ], name="EmbeddingModel")
+
+    embedding_model.summary()
+
+    # Build Siamese network
+    input_a= Input(shape=X.shape[1:])
+    input_b= Input(shape=X.shape[1:])
+
+    embedding_a= embedding_model(input_a)
+    embedding_b = embedding_model(input_b)
+
+    merged_output = layers.Lambda(lambda x: tf.sqrt(tf.reduce_sum(tf.square(x[0] - x[1]), axis=1, keepdims=True)))(
+        [embedding_a, embedding_b]
+    )
+    contrast_net = Model([input_a, input_b], merged_output)
+    contrast_net.compile(loss=contrastive_loss, optimizer='adam')
+
+    # Train/test split for triplets
+    batch_size = 128
+    train_triplets, test_triplets = train_test_split(triplets, test_size=0.1)
+    train_gen = pair_generator(X, train_triplets, batch_size)
+    test_gen = pair_generator(X, test_triplets, batch_size)
+    steps_per_epoch = len(train_triplets) // batch_size
+    validation_steps = len(test_triplets) // batch_size
+
+    # Train model
+    print("Training model")
+    contrast_net.fit(train_gen,epochs=25,steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=validation_steps)
+
+    # Visualize and evaluate
+    print("Evaluating model")
+    pairs, pair_labels = pairs_from_triplets(test_triplets, n_pairs=1000)
+    threshold = evaluate_verification(embedding_model, pairs, pair_labels, X)
+    pairs, pair_labels = pairs_from_triplets(triplets, n_pairs=8, other=True)
+    plot_face_pairs(embedding_model, pairs, pair_labels, X, y, target_names,threshold=-threshold)
+
+
+
+if __name__ == "__main__":
+    main()
