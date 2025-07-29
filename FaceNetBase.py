@@ -6,6 +6,7 @@ Inception-ResNet V1 model for Keras.
 https://github.com/nyoki-mtl/keras-facenet/blob/master/code/inception_resnet_v1.py
 This code is for loading facenet because it's 7 years old and all the model save files broke
 """
+
 from functools import partial
 
 from keras.models import Model

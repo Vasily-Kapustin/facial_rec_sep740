@@ -177,3 +177,56 @@ def plot_pca_tsne(emb, labels, class_names=None, n_samples=500):
         axes[1].legend(handles, [class_names[i] for i in set(labels_plot)], title="Classes", bbox_to_anchor=(1.05, 1))
     plt.tight_layout()
     plt.show()
+
+def plot_training_history(history):
+    """
+    Plots the loss curves and Accuracy curves
+    :param history: History object from training
+    :return:
+    """
+    history_dict = history.history
+
+    # Check which plots we have
+    has_loss = 'loss' in history_dict or 'val_loss' in history_dict
+    has_accuracy = 'accuracy' in history_dict or 'val_accuracy' in history_dict
+
+    if not has_loss and not has_accuracy:
+        print("No loss or accuracy data found to plot.")
+        return
+
+    # Create subplots
+    ncols = has_loss + has_accuracy
+    fig, axs = plt.subplots(1, ncols, figsize=(6 * ncols, 5))
+    if ncols == 1:
+        axs = [axs]  # make axs always iterable
+    plot_idx = 0
+
+    # Plot Loss
+    if has_loss:
+        ax = axs[plot_idx]
+        if 'loss' in history_dict:
+            ax.plot(history_dict['loss'], label='Train Loss')
+        if 'val_loss' in history_dict:
+            ax.plot(history_dict['val_loss'], label='Validation Loss')
+        ax.set_title('Loss Curve')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.legend()
+        ax.grid(True)
+        plot_idx += 1
+
+    # Plot Accuracy
+    if has_accuracy:
+        ax = axs[plot_idx]
+        if 'accuracy' in history_dict:
+            ax.plot(history_dict['accuracy'], label='Train Accuracy')
+        if 'val_accuracy' in history_dict:
+            ax.plot(history_dict['val_accuracy'], label='Validation Accuracy')
+        ax.set_title('Accuracy Curve')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Accuracy')
+        ax.legend()
+        ax.grid(True)
+
+    plt.tight_layout()
+    plt.show()

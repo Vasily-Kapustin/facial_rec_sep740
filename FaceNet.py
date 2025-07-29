@@ -28,6 +28,7 @@ def build_embedding_model(base_path, embedding_dim=128, input_shape=(160,160,3),
     return Model(inputs, x, name="EmbeddingModel")
 
 def main():
+
     X_img, y, target_names = get_data(size=(160,160), color=True)  # X: (N, 160, 160, 3), RGB format
 
     # Normalize (expected range for FaceNet is [-1, 1])
