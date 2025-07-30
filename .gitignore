@@ -1,3 +1,5 @@
 .venv
 *.csv
 *.h5
+__pycache__
+*.deb
