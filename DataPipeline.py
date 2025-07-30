@@ -27,7 +27,6 @@ class FaceImageAugmentor:
 
     def __init__(
             self,
-            output_size=(64, 64),
             number_of_output=10,
             rotation_range=15, rotation_prob=0.8,
             fliplr_prob=0.5,
@@ -36,11 +35,9 @@ class FaceImageAugmentor:
             x_translate_percentage=0.1, x_translate_prob=0.5,
             blur_percent=0.03, blur_prob=0.3,
             clahe_limit=2.0, clahe_prob=0.4,
-            color=False
+            color=True
     ):
-        self.output_size = output_size
         self.number_of_output = number_of_output
-
         self.rotation_range = rotation_range
         self.rotation_prob = rotation_prob
         self.fliplr_prob = fliplr_prob
@@ -63,50 +60,19 @@ class FaceImageAugmentor:
         img = np.array(img)
 
         if len(img.shape) == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
         if img.dtype != np.uint8:
             img = img.astype(np.uint8)
 
         return img
 
-    def _crop_and_resize(self, img, c, w, rot=0):
-        img = self._to_grayscale(img)
-        w = int(w)
-        h_img, w_img = img.shape[:2]
-        x, y = c
-        M = cv2.getRotationMatrix2D((x, y), rot, 1.0)
-        rotated = cv2.warpAffine(img, M, (w_img, h_img), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
-
-        x1 = int(round(x - w / 2))
-        y1 = int(round(y - w / 2))
-        x2 = int(round(x + w / 2))
-        y2 = int(round(y + w / 2))
-
-        x1, y1 = max(x1, 0), max(y1, 0)
-        x2, y2 = min(x2, w_img), min(y2, h_img)
-
-        cropped = rotated[y1:y2, x1:x2]
-
-        if cropped.size == 0 or cropped.shape[0] == 0 or cropped.shape[1] == 0:
-            y_start = max(int(round(y - w / 2)), 0)
-            y_end = min(int(round(y + w / 2)), h_img)
-            x_start = max(int(round(x - w / 2)), 0)
-            x_end = min(int(round(x + w / 2)), w_img)
-            cropped = rotated[y_start:y_end, x_start:x_end]
-
-            if cropped.size == 0 or cropped.shape[0] == 0 or cropped.shape[1] == 0:
-                cropped = rotated
-
-        resized = cv2.resize(cropped, self.output_size)
-        return resized
-
-    def _apply_rotation(self, img, center, width):
-        img = self._to_grayscale(img)
+    def _apply_rotation(self, img):
         angle = uniform(-self.rotation_range, self.rotation_range)
 
         h_img, w_img = img.shape[:2]
-        x, y = center
+        x = w_img//2
+        y = h_img//2
 
         M = cv2.getRotationMatrix2D((x, y), angle, 1.0)
         rotated = cv2.warpAffine(
@@ -116,21 +82,18 @@ class FaceImageAugmentor:
             borderValue=0
         )
 
-        return cv2.resize(rotated, self.output_size)
+        return cv2.resize(rotated, (h_img, w_img))
 
     def _apply_flip(self, img):
-        img = self._to_grayscale(img)
         return cv2.flip(img, 1)
 
     def _apply_brightness(self, img):
-        img = self._to_grayscale(img)
         factor = uniform(*self.brightness_range)
         img = img.astype(np.float32) * factor
         img = np.clip(img, 0, 255).astype(np.uint8)
         return img
 
     def _apply_translation(self, img):
-        img = self._to_grayscale(img)
         tx = int(uniform(-self.x_translate_percentage, self.x_translate_percentage) * img.shape[1])
         ty = int(uniform(-self.y_translate_percentage, self.y_translate_percentage) * img.shape[0])
         M = np.float32([[1, 0, tx], [0, 1, ty]])
@@ -138,26 +101,28 @@ class FaceImageAugmentor:
         return translated
 
     def _apply_blur(self, img):
-        img = self._to_grayscale(img)
         ksize = int(self.blur_percent * min(img.shape[:2]))
         ksize = max(ksize | 1, 3)
         return cv2.GaussianBlur(img, (ksize, ksize), 0)
 
     def _apply_clahe(self, img):
-        img = self._to_grayscale(img)
-        clahe = cv2.createCLAHE(clipLimit=self.clahe_limit, tileGridSize=(8, 8))
-        return clahe.apply(img)
+        clahe = cv2.createCLAHE(clipLimit=self.clahe_limit,tileGridSize=(8, 8))
+        if img.ndim == 2:
+            return clahe.apply(img)
+        lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        cl = clahe.apply(l)
+        merged = cv2.merge((cl, a, b))
+        return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
 
-    def augment(self, img, center, width):
-        img = img.numpy()
+    def augment(self, img):
         if not self.color:
             img = self._to_grayscale(img)
         augmented_images = []
         for _ in range(self.number_of_output):
-            aug_img = self._crop_and_resize(img, center, width)
-
+            aug_img = img.copy()
             if random() < self.rotation_prob:
-                aug_img = self._apply_rotation(aug_img, center, width)
+                aug_img = self._apply_rotation(aug_img)
 
             if random() < self.fliplr_prob:
                 aug_img = self._apply_flip(aug_img)
@@ -178,6 +143,13 @@ class FaceImageAugmentor:
 
         return augmented_images
 
+    def augment_batch(self, X, y):
+        augmented_images = []
+        augmented_labels = []
+        for i in range(len(X)):
+            augmented_images.extend(self.augment(X[i]))
+            augmented_labels.extend([y[i]]*self.number_of_output)
+        return np.array(augmented_images), np.array(augmented_labels)
 
 
 
@@ -249,8 +221,9 @@ def plot_all_person_images(img_list, label, max_cols=10, figsize=(15, 3)):
         plt.tight_layout(rect=[0, 0, 1, 0.93])
         plt.show()
 
-def get_data(augmentor = None, min_pics = 20, color= False, size=(64,64), sample=False):
+def get_data_person(min_pics = 20, color= False, size=(64,64), split=0.2):
     """
+    Splits data set by person
     :param augmentor: FaceImageAugmentor object
     :param min_pics: minimum number of pics per person to return their pictures
     :param color: fall back if no augmentor, output color images or grayscale
@@ -302,55 +275,156 @@ def get_data(augmentor = None, min_pics = 20, color= False, size=(64,64), sample
         res_dict[row[0]] = (row[1], (row[2], row[3]), row[4])
 
     person_dict_num = defaultdict(int) # Unique non augmented pics per person
-    images = []
-    labels = []
-    names_dict = {}
-    names = []
-    for i in range(len(ds)):
-        if i in res_dict.keys():
-            (name, _, _) = res_dict[i]
-            person_dict_num[name] += 1
-
+    person_dict_images = defaultdict(list)
+    valid_names =[]
+    valid_names_dict={}
     i=0
-    for _,img in tqdm(ds, total=len(ds)):
+    for lbl,img in tqdm(ds,total=len(ds)):
         if i in res_dict.keys():
             (name, c, w) = res_dict[i]
-            if person_dict_num[name] >= min_pics:
-                if name not in names_dict.keys():
-                    names_dict[name] = len(names)
-                    names.append(name)
-                img_list = []
-                if augmentor is not None:
-                    img_list = augmentor.augment(img, center=c, width=w)
-                else:
-                    img_np = img.numpy()
-                    if not color:
-                        img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                    img_list.append(crop_default(img_np, c, w, size))
-                images.extend(img_list)
-                labels.extend([names_dict[name]]*len(img_list))
+            person_dict_num[name] += 1
+            person_dict_images[name].append(crop_default(img.numpy(),c,w,size))
+        i+=1
+    num_people_test=0
+    for name in person_dict_num.keys():
+        if person_dict_num[name]>=min_pics:
+            valid_names_dict[name]=len(valid_names)
+            valid_names.append(name)
+            person_dict_num[name] = 0
+            if np.random.random() < split:
+                person_dict_num[name] = 1
+                num_people_test += 1
+
+
+    train_i=[]
+    train_l=[]
+    test_i=[]
+    test_l=[]
+    for name in valid_names:
+        for img in person_dict_images[name]:
+            if person_dict_num[name]:
+                test_i.append(img)
+                test_l.append(valid_names_dict[name])
+            else:
+                train_i.append(img)
+                train_l.append(valid_names_dict[name])
+    print(f"Number people in Test Set: {num_people_test}")
+    return np.array(train_i), np.array(train_l) , np.array(test_i), np.array(test_l), valid_names
+
+def get_data_image(min_pics = 20, color= False, size=(64,64), split=0.2):
+    """
+    Splits data set by image
+    :param min_pics: minimum number of pics per person to return their pictures
+    :param color: output color images or grayscale
+    :param size: output image size
+    :param split: chance for train/test split
+    :return: np Array of Images shape (n,h,w,c), labels reference to a person's #, list of names bases on person's #
+    """
+    ds, ds_info = tfds.load("lfw", split='train', as_supervised=True, with_info=True)
+    results = []
+    # Face cropping is an expensive task so we only run it once and save the output to a csv
+    if not os.path.exists(coords_file_name):
+        counter = 0
+        failed = 0
+        print("Calculating Faces Centers")
+        # Run face centering code first and save it to a csv
+        for label, img, in tqdm(ds, total=len(ds)):
+            img_np = img.numpy()
+            if not color:
+                img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            name = label.numpy().decode("utf-8")
+            c, w = crop_face_opencv(img_np)
+            if c is not None:
+                results.append([counter, name, c[0], c[1], w])
+            else:
+                print("failed")
+                failed += 1
+            counter += 1
+        print(f"Failed {failed} out of {len(ds)}")
+        with open(coords_file_name, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['index', 'name', 'c_x', 'c_y', 'w'])
+            writer.writerows(results)
+    else:
+        # read csv
+        with open(coords_file_name, 'r') as file:
+            my_reader = csv.reader(file, delimiter=',')
+            next(my_reader)
+            for row in my_reader:
+                (index, name, cx, cy, w) = row
+                index = int(index)
+                cx = float(cx)
+                cy = float(cy)
+                w = float(w)
+                results.append([index, name, cx, cy, w])
+
+    # All centroid, with pairs should be loaded now
+    res_dict={}
+    for row in results:
+        res_dict[row[0]] = (row[1], (row[2], row[3]), row[4])
+
+    person_dict_num = defaultdict(int) # Unique non augmented pics per person
+    person_dict_images = defaultdict(list)
+    valid_total_images = 0
+    valid_names =[]
+    valid_names_dict={}
+    i=0
+    for lbl,img in tqdm(ds,total=len(ds)):
+        if i in res_dict.keys():
+            (name, c, w) = res_dict[i]
+            person_dict_num[name] += 1
+
+            person_dict_images[name].append(crop_default(img.numpy(),c,w,size))
         i+=1
 
-    if sample:
+    for name in person_dict_num.keys():
+        if person_dict_num[name] >= min_pics:
+            valid_names_dict[name] = len(valid_names)
+            valid_names.append(name)
+            valid_total_images +=  person_dict_num[name]
 
-        randList = np.random.choice(names, size=(min(30,len(names))), replace=False, p=None)
-        randImgs = []
-        pic_dict = defaultdict(list)
-        for i, label in enumerate(labels):
-            pic_dict[names[label]].append(i)
-        for person in randList:
-            temp= np.random.randint(0,len(pic_dict[person]))
-            randImgs.append(images[pic_dict[person][temp]])
-        plot_all_person_images(randImgs,"Rand")
-    out_imgs = np.array(images,dtype =np.float32)/255.0
-    if len(out_imgs.shape) == 3: # If gray scale function deleted channel instead of leaving it as 1
-        out_imgs = np.expand_dims(out_imgs, -1)  # (n_samples, h, w, c)
-    return out_imgs, np.array(labels), names
+    samples_done =0
+    usable_names = valid_names.copy()
+    train_i = []
+    train_l = []
+    test_i = []
+    test_l = []
+    while samples_done < valid_total_images:
+        name = np.random.choice(usable_names)
+        dest = np.random.random() < split # False Train
+        if person_dict_num[name]==3 or person_dict_num[name] == 2:
+            if dest:
+                test_i.extend(person_dict_images[name])
+                test_l.extend([valid_names_dict[name]]*person_dict_num[name])
+            else:
+                train_i.extend(person_dict_images[name])
+                train_l.extend([valid_names_dict[name]] * person_dict_num[name])
+            samples_done+=person_dict_num[name]
+            person_dict_num[name] = 0
+            person_dict_images[name] = []
+            usable_names.remove(name)
+        else:
+            c, b = np.random.choice(range(person_dict_num[name]), 2, replace=False)
+            a = max(c,b)
+            b = min(c,b)
+            if dest:
+                test_i.append(person_dict_images[name].pop(a))
+                test_i.append(person_dict_images[name].pop(b))
+                test_l.extend([valid_names_dict[name]] * 2)
+            else:
+                train_i.append(person_dict_images[name].pop(a))
+                train_i.append(person_dict_images[name].pop(b))
+                train_l.extend([valid_names_dict[name]] * 2)
+            person_dict_num[name] -= 2
+            samples_done +=2
+
+    return np.array(train_i), np.array(train_l) , np.array(test_i), np.array(test_l), valid_names
+
 
 if __name__ == '__main__':
     augmentor = FaceImageAugmentor(
-        number_of_output=5,
-        rotation_range=8, rotation_prob=0.5,
+        number_of_output=1,
+        rotation_range=8, rotation_prob=0.2,
         fliplr_prob=0.5,
         brightness_range=(0.7, 1.3), brightness_prob=0.7,
         y_translate_percentage=0.1, y_translate_prob=0.2,
@@ -358,6 +432,29 @@ if __name__ == '__main__':
         blur_percent=0.08, blur_prob=0.4,
         clahe_limit=0.8, clahe_prob=0.4
     )
-    get_data(augmentor,min_pics=3,color=False,sample=True)
-    pass
+    X_train, y_train, X_test, y_test, names = get_data_image(min_pics=2)
+    X_test, y_test = augmentor.augment_batch(X_test,y_test)
+    N = len(X_test)
+    num_images = min(30, N)
+    idxs = np.random.choice(N, num_images, replace=False)
+    rows = int(np.ceil(num_images / 5))
+    fig, axes = plt.subplots(rows, 5, figsize=(5 * 2, rows * 2))
+    axes = axes.flatten()
+    for ax, idx in zip(axes, idxs):
+        img = X_test[idx]
+        lab = y_test[idx]
+        if img.ndim == 2:
+            ax.imshow(img, cmap='gray')
+        else:
+            ax.imshow(img)
+        ax.set_title(names[lab], fontsize=12)
+        ax.axis('off')
+
+    # turn off any unused subplots
+    for ax in axes[num_images:]:
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
 

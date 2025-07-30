@@ -23,14 +23,8 @@ def plot_face_pairs(embedding_model, pairs, pair_truth, images, labels, target_n
     fig, axes = plt.subplots(n_total, 6, figsize=(16, 2.2 * n_total))
 
     for i, ((i1, i2), same) in enumerate(zip(pairs, pair_truth)):
-        # Faces
-        axes[i, 0].imshow(images[i1].squeeze(), cmap='gray', interpolation='nearest')
-        axes[i, 0].set_title(target_names[labels[i1]], fontsize=12)
-        axes[i, 0].axis('off')
-
-        axes[i, 1].imshow(images[i2].squeeze(), cmap='gray', interpolation='nearest')
-        axes[i, 1].set_title(target_names[labels[i2]], fontsize=12)
-        axes[i, 1].axis('off')
+        image1 = images[i1]
+        image2 = images[i2]
 
         # Embeddings
         e1 = embedding_model.predict(images[i1][None], verbose=0)[0]
@@ -38,6 +32,20 @@ def plot_face_pairs(embedding_model, pairs, pair_truth, images, labels, target_n
         heat1 = e1.reshape(8, 8)
         heat2 = e2.reshape(8, 8)
         diff = np.abs(e1 - e2).reshape(8, 8)
+
+        # Faces
+        if (image1 < 0).any(): # Catch [-1,1] or [0,1]
+            image1 = (image1 + 1) / 2
+            image2 = (image2 + 1) / 2
+        axes[i, 0].imshow(image1, interpolation='nearest')
+        axes[i, 0].set_title(target_names[labels[i1]], fontsize=12)
+        axes[i, 0].axis('off')
+
+        axes[i, 1].imshow(image2, interpolation='nearest')
+        axes[i, 1].set_title(target_names[labels[i2]], fontsize=12)
+        axes[i, 1].axis('off')
+
+
 
         # Face 1 heatmap
         axes[i, 2].imshow(heat1, cmap='viridis', vmin=-0.6, vmax=0.6, interpolation='nearest')
@@ -77,7 +85,7 @@ def plot_face_pairs(embedding_model, pairs, pair_truth, images, labels, target_n
     plt.tight_layout()
     plt.show()
 
-def evaluate_verification(embedding_model, pairs, pair_truth, images, verbose=True):
+def evaluate_verification(embedding_model, pairs, pair_truth, images, verbose=True, plot=True):
     """
     This function exists to plot and display evaluation results
     :param embedding_model: Model which will be used to predict embeddings
@@ -85,6 +93,7 @@ def evaluate_verification(embedding_model, pairs, pair_truth, images, verbose=Tr
     :param pair_truth: List of truth labels shape (n_pairs) containing ground truth labels
     :param images: List of images shape (n, h, w, c)
     :param verbose: Print additional stats
+    :param plot: Should plots happen
     :return: Best threshold to use for prediction
     """
     X_test = []
@@ -105,7 +114,8 @@ def evaluate_verification(embedding_model, pairs, pair_truth, images, verbose=Tr
     # Compute embeddings
     X_test= np.array(X_test)
     emb = embedding_model.predict(X_test, batch_size=128, verbose=0)
-    plot_pca_tsne(emb, emb_labels)
+    if plot:
+        plot_pca_tsne(emb, emb_labels)
     # Compute distances
     distances = np.array([np.linalg.norm(emb[sub_dict[a]] - emb[sub_dict[b]]) for a, b in pairs])
 
@@ -122,15 +132,16 @@ def evaluate_verification(embedding_model, pairs, pair_truth, images, verbose=Tr
     rec = recall_score(pair_truth, y_pred)
     f1 = f1_score(pair_truth, y_pred)
 
-    # Plot ROC
-    plt.figure(figsize=(6, 4))
-    plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
-    plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Verification ROC Curve')
-    plt.legend()
-    plt.show()
+    if plot:
+        # Plot ROC
+        plt.figure(figsize=(6, 4))
+        plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
+        plt.plot([0, 1], [0, 1], 'k--')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Verification ROC Curve')
+        plt.legend()
+        plt.show()
 
     if verbose:
         print(f"Accuracy: {acc:.3f}, Precision: {prec:.3f}, Recall: {rec:.3f}, F1: {f1:.3f}, ROC AUC: {roc_auc:.3f}")
