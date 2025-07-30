@@ -149,19 +149,21 @@ if __name__ == "__main__":
     cv2.imwrite("augment_1_image.jpg", img_bgr)
 
     train_triplets, val_triplets = train_test_split(all_train_triplets, test_size=0.1)
-    # Train model
 
+    model_func = train_facenet_model
+
+    # Train model
     print("\nTraining model 1 with no augmentor")
-    embedding_model_1, _ = train_facenet_model(X_train, train_triplets, val_triplets, batch_size=batch_size, epochs=epochs)
+    embedding_model_1, _ = model_func(X_train, train_triplets, val_triplets, batch_size=batch_size, epochs=epochs)
 
     print("\nTraining model 2 with augmentor 1")
-    embedding_model_2, _ = train_facenet_model(X_train_aug_1,train_triplets, val_triplets,batch_size=batch_size, epochs=epochs)
+    embedding_model_2, _ = model_func(X_train_aug_1,train_triplets, val_triplets,batch_size=batch_size, epochs=epochs)
 
     print("\nTraining model 3 with augmentor 2")
-    embedding_model_3, _ = train_facenet_model(X_train_aug_2,train_triplets, val_triplets,batch_size=batch_size, epochs=epochs)
+    embedding_model_3, _ = model_func(X_train_aug_2,train_triplets, val_triplets,batch_size=batch_size, epochs=epochs)
 
     print("\nTraining model 4 with augmentor 3")
-    embedding_model_4, _ = train_facenet_model(X_train_aug_3, train_triplets, val_triplets,batch_size=batch_size, epochs=epochs)
+    embedding_model_4, _ = model_func(X_train_aug_3, train_triplets, val_triplets,batch_size=batch_size, epochs=epochs)
 
     #  Evaluate model
     # print("Performance on validation set")
