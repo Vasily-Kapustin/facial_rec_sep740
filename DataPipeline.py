@@ -59,55 +59,46 @@ class FaceImageAugmentor:
     def _to_grayscale(self, img):
         if hasattr(img, 'numpy'):
             img = img.numpy()
-
         img = np.array(img)
-
-        if len(img.shape) == 3:
+    
+        if not self.color and len(img.shape) == 3 and img.shape[2] == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
         if img.dtype != np.uint8:
             img = img.astype(np.uint8)
-
         return img
 
     def _crop_and_resize(self, img, c, w, rot=0):
-        img = self._to_grayscale(img)
+        if not self.color:
+            img = self._to_grayscale(img)
         w = int(w)
         h_img, w_img = img.shape[:2]
         x, y = c
         M = cv2.getRotationMatrix2D((x, y), rot, 1.0)
         rotated = cv2.warpAffine(img, M, (w_img, h_img), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
-
         x1 = int(round(x - w / 2))
         y1 = int(round(y - w / 2))
         x2 = int(round(x + w / 2))
         y2 = int(round(y + w / 2))
-
         x1, y1 = max(x1, 0), max(y1, 0)
         x2, y2 = min(x2, w_img), min(y2, h_img)
-
         cropped = rotated[y1:y2, x1:x2]
-
         if cropped.size == 0 or cropped.shape[0] == 0 or cropped.shape[1] == 0:
             y_start = max(int(round(y - w / 2)), 0)
             y_end = min(int(round(y + w / 2)), h_img)
             x_start = max(int(round(x - w / 2)), 0)
             x_end = min(int(round(x + w / 2)), w_img)
             cropped = rotated[y_start:y_end, x_start:x_end]
-
             if cropped.size == 0 or cropped.shape[0] == 0 or cropped.shape[1] == 0:
                 cropped = rotated
-
         resized = cv2.resize(cropped, self.output_size)
         return resized
 
     def _apply_rotation(self, img, center, width):
-        img = self._to_grayscale(img)
+        if not self.color:
+            img = self._to_grayscale(img)
         angle = uniform(-self.rotation_range, self.rotation_range)
-
         h_img, w_img = img.shape[:2]
         x, y = center
-
         M = cv2.getRotationMatrix2D((x, y), angle, 1.0)
         rotated = cv2.warpAffine(
             img, M, (w_img, h_img),
@@ -115,22 +106,27 @@ class FaceImageAugmentor:
             borderMode=cv2.BORDER_CONSTANT,
             borderValue=0
         )
-
         return cv2.resize(rotated, self.output_size)
 
     def _apply_flip(self, img):
-        img = self._to_grayscale(img)
         return cv2.flip(img, 1)
 
     def _apply_brightness(self, img):
-        img = self._to_grayscale(img)
-        factor = uniform(*self.brightness_range)
-        img = img.astype(np.float32) * factor
-        img = np.clip(img, 0, 255).astype(np.uint8)
-        return img
+        if not self.color:
+            img = self._to_grayscale(img)
+            factor = uniform(*self.brightness_range)
+            img = img.astype(np.float32) * factor
+            img = np.clip(img, 0, 255).astype(np.uint8)
+            return img
+        else:
+            factor = uniform(*self.brightness_range)
+            img = img.astype(np.float32) * factor
+            img = np.clip(img, 0, 255).astype(np.uint8)
+            return img
 
     def _apply_translation(self, img):
-        img = self._to_grayscale(img)
+        if not self.color:
+            img = self._to_grayscale(img)
         tx = int(uniform(-self.x_translate_percentage, self.x_translate_percentage) * img.shape[1])
         ty = int(uniform(-self.y_translate_percentage, self.y_translate_percentage) * img.shape[0])
         M = np.float32([[1, 0, tx], [0, 1, ty]])
@@ -138,49 +134,146 @@ class FaceImageAugmentor:
         return translated
 
     def _apply_blur(self, img):
-        img = self._to_grayscale(img)
+        if not self.color:
+            img = self._to_grayscale(img)
         ksize = int(self.blur_percent * min(img.shape[:2]))
         ksize = max(ksize | 1, 3)
         return cv2.GaussianBlur(img, (ksize, ksize), 0)
 
     def _apply_clahe(self, img):
-        img = self._to_grayscale(img)
-        clahe = cv2.createCLAHE(clipLimit=self.clahe_limit, tileGridSize=(8, 8))
-        return clahe.apply(img)
+        if not self.color:
+            img = self._to_grayscale(img)
+            clahe = cv2.createCLAHE(clipLimit=self.clahe_limit, tileGridSize=(8, 8))
+            return clahe.apply(img)
+        else:
+            # apply clahe to each channel separately 
+            if img.dtype != np.uint8:
+                img = img.astype(np.uint8)
+            img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+            clahe = cv2.createCLAHE(clipLimit=self.clahe_limit, tileGridSize=(8, 8))
+            # Ensure Y channel is uint8
+            if img_yuv[:, :, 0].dtype != np.uint8:
+                img_yuv[:, :, 0] = img_yuv[:, :, 0].astype(np.uint8)
+            img_yuv[:, :, 0] = clahe.apply(img_yuv[:, :, 0])
+            img_clahe = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
+            return img_clahe
 
-    def augment(self, img, center, width):
-        img = img.numpy()
+    def augment(self, img, center=None, width=None):
+        if hasattr(img, 'numpy'):
+            img = img.numpy()
         if not self.color:
             img = self._to_grayscale(img)
         augmented_images = []
         for _ in range(self.number_of_output):
-            aug_img = self._crop_and_resize(img, center, width)
-
-            if random() < self.rotation_prob:
-                aug_img = self._apply_rotation(aug_img, center, width)
-
+            aug_img = img.copy()
+            if center is not None and width is not None:
+                aug_img = self._crop_and_resize(img, center, width)
+                if random() < self.rotation_prob:
+                    aug_img = self._apply_rotation(aug_img, center, width)
             if random() < self.fliplr_prob:
                 aug_img = self._apply_flip(aug_img)
-
             if random() < self.brightness_prob:
                 aug_img = self._apply_brightness(aug_img)
-
             if random() < self.x_translate_prob or random() < self.y_translate_prob:
                 aug_img = self._apply_translation(aug_img)
-
             if random() < self.blur_prob:
                 aug_img = self._apply_blur(aug_img)
-
             if random() < self.clahe_prob:
                 aug_img = self._apply_clahe(aug_img)
-
             augmented_images.append(aug_img)
-
+        if len(augmented_images) == 1:
+            return augmented_images[0]
         return augmented_images
 
 
+def get_data_person(min_pics = 20, color= False, size=(64,64), split=0.2):
+    """
+    :param augmentor: FaceImageAugmentor object
+    :param min_pics: minimum number of pics per person to return their pictures
+    :param color: fall back if no augmentor, output color images or grayscale
+    :param size: fall back if no augmentor, output image size
+    :param sample: show debug plot
+    :return: np Array of Images shape (n,h,w,c), labels reference to a person's #, list of names bases on person's #
+    """
+    ds, ds_info = tfds.load("lfw", split='train', as_supervised=True, with_info=True)
+    results = []
+    # Face cropping is an expensive task so we only run it once and save the output to a csv
+    if not os.path.exists(coords_file_name):
+        counter = 0
+        failed = 0
+        print("Calculating Faces Centers")
+        # Run face centering code first and save it to a csv
+        for label, img, in tqdm(ds, total=len(ds)):
+            img_np = img.numpy()
+            if not color:
+                img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            name = label.numpy().decode("utf-8")
+            c, w = crop_face_opencv(img_np)
+            if c is not None:
+                results.append([counter, name, c[0], c[1], w])
+            else:
+                print("failed")
+                failed += 1
+            counter += 1
+        print(f"Failed {failed} out of {len(ds)}")
+        with open(coords_file_name, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['index', 'name', 'c_x', 'c_y', 'w'])
+            writer.writerows(results)
+    else:
+        # read csv
+        with open(coords_file_name, 'r') as file:
+            my_reader = csv.reader(file, delimiter=',')
+            next(my_reader)
+            for row in my_reader:
+                (index, name, cx, cy, w) = row
+                index = int(index)
+                cx = float(cx)
+                cy = float(cy)
+                w = float(w)
+                results.append([index, name, cx, cy, w])
+
+    # All centroid, with pairs should be loaded now
+    res_dict={}
+    for row in results:
+        res_dict[row[0]] = (row[1], (row[2], row[3]), row[4])
+
+    person_dict_num = defaultdict(int) # Unique non augmented pics per person
+    person_dict_images = defaultdict(list)
+    valid_names =[]
+    valid_names_dict={}
+    i=0
+    for lbl,img in tqdm(ds,total=len(ds)):
+        if i in res_dict.keys():
+            (name, c, w) = res_dict[i]
+            person_dict_num[name] += 1
+            person_dict_images[name].append(crop_default(img.numpy(),c,w,size))
+        i+=1
+    num_people_test=0
+    for name in person_dict_num.keys():
+        if person_dict_num[name]>=min_pics:
+            valid_names_dict[name]=len(valid_names)
+            valid_names.append(name)
+            person_dict_num[name] = 0
+            if np.random.random() < split:
+                person_dict_num[name] = 1
+                num_people_test += 1
 
 
+    train_i=[]
+    train_l=[]
+    test_i=[]
+    test_l=[]
+    for name in valid_names:
+        for img in person_dict_images[name]:
+            if person_dict_num[name]:
+                test_i.append(img)
+                test_l.append(valid_names_dict[name])
+            else:
+                train_i.append(img)
+                train_l.append(valid_names_dict[name])
+    print(f"Number people in Test Set: {num_people_test}")
+    return np.array(train_i), np.array(train_l) , np.array(test_i), np.array(test_l), valid_names
 
 def crop_face_opencv(img_np):
     """
