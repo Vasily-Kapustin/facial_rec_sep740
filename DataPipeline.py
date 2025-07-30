@@ -342,7 +342,7 @@ def get_data(augmentor = None, min_pics = 20, color= False, size=(64,64), sample
             temp= np.random.randint(0,len(pic_dict[person]))
             randImgs.append(images[pic_dict[person][temp]])
         plot_all_person_images(randImgs,"Rand")
-    out_imgs = np.array(images,dtype =np.float16)/255.0
+    out_imgs = np.array(images,dtype =np.float32)/255.0
     if len(out_imgs.shape) == 3: # If gray scale function deleted channel instead of leaving it as 1
         out_imgs = np.expand_dims(out_imgs, -1)  # (n_samples, h, w, c)
     return out_imgs, np.array(labels), names
@@ -358,6 +358,6 @@ if __name__ == '__main__':
         blur_percent=0.08, blur_prob=0.4,
         clahe_limit=0.8, clahe_prob=0.4
     )
-    get_data(augmentor,min_pics=2,color=False,sample=True)
+    get_data(augmentor,min_pics=3,color=False,sample=True)
     pass
 

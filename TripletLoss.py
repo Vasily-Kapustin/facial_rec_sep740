@@ -24,8 +24,8 @@ def main():
     #policy = tf.keras.mixed_precision.Policy('mixed_float16')
     #tf.keras.mixed_precision.set_global_policy(policy)
     augmentor = FaceImageAugmentor(
-        number_of_output=2,
-        color=True, output_size=(160,160),
+        number_of_output=5,
+
         rotation_range=3, rotation_prob=0.01,
         fliplr_prob=0.5,
         brightness_range=(0.7, 1.3), brightness_prob=0.7,
@@ -34,7 +34,7 @@ def main():
         blur_percent=0.08, blur_prob=0.4,
         clahe_limit=0.8, clahe_prob=0.4
     )
-    X, y, target_names = get_data(size=(64,64),color=True, min_pics=2)
+    X, y, target_names = get_data(augmentor, min_pics=2)
 
     # Create triplets (anchor, positive, negative)
     print("Generating triplets")
@@ -75,17 +75,17 @@ def main():
     triplet_net.compile(loss=triplet_loss(), optimizer='adam')
 
     # Train/test split for triplets
-    batch_size = 32
+    batch_size = 64
     train_triplets, test_triplets = train_test_split(triplets, test_size=0.1)
     train_gen = triplet_generator(X, train_triplets, batch_size)
     test_gen = triplet_generator(X, test_triplets, batch_size)
-    steps_per_epoch = len(train_triplets) // batch_size//4
-    validation_steps = len(test_triplets) // batch_size//4
+    steps_per_epoch = len(train_triplets) // batch_size
+    validation_steps = len(test_triplets) // batch_size
 
     # Train model
     print("Training model")
-    H3 = triplet_net.fit(train_gen,epochs=50,steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=validation_steps)
-    plot_training_history(H3)
+    H3 = triplet_net.fit(train_gen,epochs=30,steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=validation_steps)
+    plot_training_history(H3,"Triplet")
     # Visualize embeddings
     print("Evaluating model")
     pairs, pair_labels = pairs_from_triplets(test_triplets)

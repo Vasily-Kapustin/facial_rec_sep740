@@ -73,7 +73,7 @@ def main():
     callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=10)
 
     H1 = model.fit(X_train, y_train, epochs=150, batch_size=100, verbose=1, validation_split=0.1, callbacks=[callback])
-    plot_training_history(H1)
+    plot_training_history(H1,"Classifier")
     y_pred = model.predict(X_test)
     y_test = np.argmax(y_test, axis=-1)
     y_pred = np.argmax(y_pred, axis=-1)

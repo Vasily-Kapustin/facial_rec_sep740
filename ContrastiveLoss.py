@@ -32,7 +32,7 @@ def main():
         clahe_limit=0.8, clahe_prob=0.4
     )
 
-    X, y, target_names = get_data( min_pics=2)
+    X, y, target_names = get_data(augmentor,min_pics=2)
 
     # Create triplets (anchor, positive, negative)
     print("Generating triplets")
@@ -71,7 +71,7 @@ def main():
     contrast_net.compile(loss=contrastive_loss, optimizer='adam')
 
     # Train/test split for triplets
-    batch_size = 256
+    batch_size = 64
     train_triplets, test_triplets = train_test_split(triplets, test_size=0.1)
     train_gen = pair_generator(X, train_triplets, batch_size)
     test_gen = pair_generator(X, test_triplets, batch_size)
@@ -80,8 +80,8 @@ def main():
 
     # Train model
     print("Training model")
-    H2= contrast_net.fit(train_gen,epochs=40,steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=validation_steps)
-    plot_training_history(H2)
+    H2= contrast_net.fit(train_gen,epochs=30,steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=validation_steps)
+    plot_training_history(H2,"Contrastive")
     # Visualize and evaluate
     print("Evaluating model")
     pairs, pair_labels = pairs_from_triplets(test_triplets)

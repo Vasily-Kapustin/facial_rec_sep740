@@ -5,7 +5,7 @@ import tensorflow.keras.backend as K
 
 from Generators import *
 from PlotMetrics import *
-from DataPipeline import get_data
+from DataPipeline import get_data, FaceImageAugmentor
 from FaceNetBase import InceptionResNetV1
 
 def triplet_loss(margin=1.0):
@@ -28,8 +28,19 @@ def build_embedding_model(base_path, embedding_dim=128, input_shape=(160,160,3),
     return Model(inputs, x, name="EmbeddingModel")
 
 def main():
-
-    X_img, y, target_names = get_data(size=(160,160), color=True)  # X: (N, 160, 160, 3), RGB format
+    augmentor = FaceImageAugmentor(
+        number_of_output=5,
+        color=True,
+        output_size=(160, 160),
+        rotation_range=3, rotation_prob=0.01,
+        fliplr_prob=0.5,
+        brightness_range=(0.7, 1.3), brightness_prob=0.7,
+        y_translate_percentage=0.1, y_translate_prob=0.2,
+        x_translate_percentage=0.1, x_translate_prob=0.2,
+        blur_percent=0.08, blur_prob=0.4,
+        clahe_limit=0.8, clahe_prob=0.4
+    )
+    X_img, y, target_names = get_data(augmentor, size=(160,160), color=True,min_pics=2)  # X: (N, 160, 160, 3), RGB format
 
     # Normalize (expected range for FaceNet is [-1, 1])
     X = (X_img.astype(np.float32)*2.0) - 1.0
@@ -65,8 +76,8 @@ def main():
 
     # Train model
     print("Training model")
-    triplet_net.fit(train_gen,epochs=20, steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=val_steps)
-
+    h4= triplet_net.fit(train_gen,epochs=15, steps_per_epoch=steps_per_epoch,validation_data=test_gen,validation_steps=val_steps)
+    plot_training_history(h4,"FaceNet Triplet")
     # Visualize and evaluate
     print("Evaluating model")
     pairs, pair_labels = pairs_from_triplets(test_triplets)
