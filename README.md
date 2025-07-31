@@ -14,6 +14,7 @@ pip install tensorflow-datasets
 pip install matplotlib
 pip install scikit-learn
 pip install opencv-python
+pip install visual-keras
 ~~~
 
 [Source FaceNet Weights](https://drive.google.com/drive/folders/1pwQ3H4aJ8a6yyJHZkTwtjcL4wYWQb7bn?usp=drive_link),
@@ -21,7 +22,8 @@ pip install opencv-python
 
 ## Run
 Three files with different models
-* ContrastiveLoss.py
-* TripletLoss.py
-* FaceNet.py
+* Identification.py
+* TestSingleModel.py
+* demoAugmentations.py
+* demoModels.py
 

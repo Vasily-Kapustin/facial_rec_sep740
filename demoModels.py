@@ -6,6 +6,7 @@ from PlotMetrics import *
 from DataPipeline import get_data_person, get_data_image, FaceImageAugmentor
 from ModelHelpers import *
 
+import tensorflow as tf
 
 import numpy as np
 import cv2
@@ -13,15 +14,15 @@ import cv2
 if __name__ == "__main__":
     # Example usage
     min_pics = 2
-    batch_size = 64
-    epochs = 20
-    triplet_count = 15000
+    batch_size = 128
+    epochs = 30
+    triplet_count = 300000
     split = 0.1
     # Load dataset
     X_train, y_train, X_test, y_test, target_names = get_data_image(min_pics=min_pics, color=True, size=(160, 160), split=split)
     gc.collect()
     augmentor = FaceImageAugmentor(
-        number_of_output=2,
+        number_of_output=1,
         rotation_range=5, rotation_prob=0.2,  # still mild, but most aggressive of the three
         fliplr_prob=0.4,
         brightness_range=(0.85, 1.15), brightness_prob=0.4,
@@ -55,11 +56,12 @@ if __name__ == "__main__":
     #cv2.imwrite("augment_1_image.jpg", img_bgr)
 
     runs =[
-        {"mf":train_simple_contrastive,"pn":"Simple Contrastive"},
-        {"mf":train_deep_contrastive,"pn":"Deep Contrastive"},
-        {"mf": train_simple_triplet, "pn": "Simple Triplet"},
+        #{"mf":train_simple_contrastive,"pn":"Simple Contrastive"},
+        #{"mf":train_deep_contrastive,"pn":"Deep Contrastive"},
+        #{"mf": train_simple_triplet, "pn": "Simple Triplet"},
         {"mf": train_deep_triplet, "pn": "Deep Triplet"},
-        {"mf": train_facenet, "pn": "FaceNet PreTrain"},]
+        #{"mf": train_facenet, "pn": "FaceNet PreTrain"},
+    ]
 
     summary =[]
     for i, run in enumerate(runs):
