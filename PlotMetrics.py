@@ -80,7 +80,7 @@ def plot_face_pairs(embedding_model, pairs, pair_truth, images, labels, target_n
     axes[0, 2].set_title("Face 1\nHeatmap", fontsize=12, fontweight='bold')
     axes[0, 3].set_title("Face 2\nHeatmap", fontsize=12, fontweight='bold')
     axes[0, 4].set_title("Abs Heatmap\nDiff", fontsize=12, fontweight='bold')
-    axes[0, 5].set_title("Prediction Threshold: " + str(threshold), fontsize=12, fontweight='bold')
+    axes[0, 5].set_title(f"Prediction Threshold: {threshold:.3f}", fontsize=12, fontweight='bold')
 
     plt.tight_layout()
     plt.show()
@@ -147,7 +147,7 @@ def evaluate_verification(embedding_model, pairs, pair_truth, images, verbose=Tr
         print(f"Accuracy: {acc:.3f}, Precision: {prec:.3f}, Recall: {rec:.3f}, F1: {f1:.3f}, ROC AUC: {roc_auc:.3f}")
         print(f"Best threshold (distance): {best_threshold:.3f}")
 
-    return best_threshold
+    return {"accuracy":acc, "precision":prec, "recall":rec, "f1":f1, "roc_auc":roc_auc, "threshold":best_threshold}
 
 
 def plot_pca_tsne(emb, labels, class_names=None, n_samples=500):

@@ -9,7 +9,7 @@ import csv
 from random import random
 from random import uniform
 
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+face_cascade = None
 coords_file_name = "face_crop_coords.csv"
 
 class FaceImageAugmentor:
@@ -144,12 +144,20 @@ class FaceImageAugmentor:
         return augmented_images
 
     def augment_batch(self, X, y):
-        augmented_images = []
-        augmented_labels = []
-        for i in range(len(X)):
-            augmented_images.extend(self.augment(X[i]))
-            augmented_labels.extend([y[i]]*self.number_of_output)
-        return np.array(augmented_images), np.array(augmented_labels)
+        N= len(X)
+        shapeX = list(X.shape)
+        shapeX[0] = N*self.number_of_output
+        shapeX = tuple(shapeX)
+        shapeY = list(y.shape)
+        shapeY[0] = N * self.number_of_output
+        shapeY = tuple(shapeY)
+        augmented_images = np.empty(shapeX,dtype=np.float32)
+        augmented_labels = np.empty(shapeY)
+        for i in range(N):
+            for j,img in enumerate(self.augment(X[i])):
+                augmented_images[i+j*N] = img
+                augmented_labels[i+j*N] = y[i]
+        return augmented_images, augmented_labels
 
 
 
@@ -239,6 +247,8 @@ def get_data_person(min_pics = 20, color= False, size=(64,64), split=0.2):
         failed = 0
         print("Calculating Faces Centers")
         # Run face centering code first and save it to a csv
+        global face_cascade
+        face_cascade= cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
         for label, img, in tqdm(ds, total=len(ds)):
             img_np = img.numpy()
             if not color:
@@ -309,6 +319,7 @@ def get_data_person(min_pics = 20, color= False, size=(64,64), split=0.2):
                 train_i.append(img)
                 train_l.append(valid_names_dict[name])
     print(f"Number people in Test Set: {num_people_test}")
+    del ds
     return np.array(train_i), np.array(train_l) , np.array(test_i), np.array(test_l), valid_names
 
 def get_data_image(min_pics = 20, color= False, size=(64,64), split=0.2):
@@ -328,6 +339,8 @@ def get_data_image(min_pics = 20, color= False, size=(64,64), split=0.2):
         failed = 0
         print("Calculating Faces Centers")
         # Run face centering code first and save it to a csv
+        global face_cascade
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
         for label, img, in tqdm(ds, total=len(ds)):
             img_np = img.numpy()
             if not color:
@@ -417,7 +430,7 @@ def get_data_image(min_pics = 20, color= False, size=(64,64), split=0.2):
                 train_l.extend([valid_names_dict[name]] * 2)
             person_dict_num[name] -= 2
             samples_done +=2
-
+    del ds
     return np.array(train_i), np.array(train_l) , np.array(test_i), np.array(test_l), valid_names
 
 

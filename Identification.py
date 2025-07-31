@@ -9,7 +9,7 @@ import visualkeras
 
 from Generators import *
 from PlotMetrics import *
-from DataPipeline import get_data, FaceImageAugmentor
+from DataPipeline import get_data_image, FaceImageAugmentor
 
 
 def plot_gallery(images, titles, h, w, n_row=3, n_col=3):
@@ -41,7 +41,7 @@ def title(y_pred, y_test, target_names, i):
 
 
 def main():
-    X, y, target_names = get_data(min_pics=50)
+    X, y, target_names = get_data_image(min_pics=50)
     num_classes = len(target_names)
     y = tf.keras.utils.to_categorical(y, num_classes=num_classes)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20)
